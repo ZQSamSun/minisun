@@ -3,12 +3,37 @@
 
 const { generateImage } = require('./imageService');
 
+// generateImage alone — for use when no YouTube JSON is loaded
+const IMAGE_TOOL_DECLARATIONS = [
+  {
+    name: 'generateImage',
+    description:
+      'Generate an image from a text prompt using Imagen (or Gemini as fallback). ' +
+      'Use whenever the user asks to create, generate, draw, or visualize an image. No YouTube JSON required.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        prompt: { type: 'STRING', description: 'Text description of the image to generate.' },
+        anchorImageBase64: {
+          type: 'STRING',
+          description: 'Optional. Base64-encoded reference image to guide generation.',
+        },
+        anchorMimeType: {
+          type: 'STRING',
+          description: 'MIME type of anchor image if provided (default image/png).',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
+];
+
 const JSON_TOOL_DECLARATIONS = [
   {
     name: 'generateImage',
     description:
-      'Generate an image from a text prompt, optionally using an anchor/reference image for style or content. ' +
-      'Returns the generated image for display with download and enlarge options.',
+      'Generate an image from a text prompt using Imagen (or Gemini as fallback). ' +
+      'Optionally provide an anchor/reference image for style or content. Returns the generated image for display with download and enlarge options.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -108,6 +133,7 @@ async function executeJsonTool(toolName, args, jsonChannelData, imageParts = [])
   switch (toolName) {
     case 'generateImage': {
       const img = await generateImage(args.prompt, anchorImg, anchorMime);
+      if (img.error) return { error: img.error };
       return { _chartType: 'generatedImage', ...img };
     }
 
@@ -181,4 +207,4 @@ async function executeJsonTool(toolName, args, jsonChannelData, imageParts = [])
   }
 }
 
-module.exports = { JSON_TOOL_DECLARATIONS, executeJsonTool };
+module.exports = { JSON_TOOL_DECLARATIONS, IMAGE_TOOL_DECLARATIONS, executeJsonTool };

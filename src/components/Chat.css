@@ -229,6 +229,20 @@
   overflow: hidden;
 }
 
+.chat-main-dropzone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.chat-main-dropzone.drag-over {
+  outline: 2px dashed rgba(99, 102, 241, 0.6);
+  outline-offset: -4px;
+  border-radius: 12px;
+}
+
 .chat-header {
   padding: 0.9rem 1.5rem;
   background: rgba(255, 255, 255, 0.04);
@@ -774,6 +788,29 @@
 
 .csv-chip-remove:hover {
   color: #6ee7b7;
+}
+
+/* File load error */
+.file-load-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #fca5a5;
+}
+.file-load-error button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0 0.25rem;
 }
 
 /* JSON chip */

@@ -236,7 +236,7 @@ app.post('/api/youtube/channel', async (req, res) => {
 
 // ── Chat (Gemini proxy — API key stays on server) ─────────────────────────────
 
-const { streamChat, chatWithCsvTools, chatWithJsonTools } = require('./geminiService');
+const { streamChat, chatWithCsvTools, chatWithJsonTools, chatWithImageTools } = require('./geminiService');
 
 app.post('/api/chat/stream', async (req, res) => {
   try {
@@ -269,8 +269,13 @@ app.post('/api/chat/tools', async (req, res) => {
       return res.json(result);
     }
 
-    if (!Array.isArray(csvRows)) return res.status(400).json({ error: 'csvRows or jsonChannelData required' });
-    const result = await chatWithCsvTools(history || [], message, csvHeaders || [], csvRows, user || null);
+    if (Array.isArray(csvRows) && csvRows.length > 0) {
+      const result = await chatWithCsvTools(history || [], message, csvHeaders || [], csvRows, user || null);
+      return res.json(result);
+    }
+
+    // No JSON/CSV — use image + search tools (generateImage works without YouTube data)
+    const result = await chatWithImageTools(history || [], message, user || null, imageParts || []);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

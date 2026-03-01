@@ -130,6 +130,7 @@ export default function Chat({ user, onLogout }) {
   const [streaming, setStreaming] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [fileLoadError, setFileLoadError] = useState('');
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -188,6 +189,7 @@ export default function Chat({ user, onLogout }) {
     setSessionCsvHeaders(null);
     setJsonContext(null);
     setSessionJsonData(null);
+    setFileLoadError('');
   };
 
   const handleSelectSession = (sessionId) => {
@@ -234,10 +236,32 @@ export default function Chat({ user, onLogout }) {
 
   const handleJsonParse = (text) => {
     try {
-      const obj = JSON.parse(text);
-      const videos = obj.videos || obj.items || (Array.isArray(obj) ? obj : []);
-      if (videos.length && typeof videos[0] === 'object') return { ...obj, videos };
-      return null;
+      const cleaned = String(text || '').replace(/^\uFEFF/, '').trim();
+      const obj = JSON.parse(cleaned);
+      let videos = null;
+      if (obj && typeof obj === 'object') {
+        videos = obj.videos ?? obj.items ?? obj.data ?? obj.results;
+      }
+      if (Array.isArray(obj) && obj.length > 0) {
+        const first = obj[0];
+        if (first && typeof first === 'object') videos = obj;
+      }
+      if (!videos && obj && typeof obj === 'object') {
+        for (const k of Object.keys(obj)) {
+          const v = obj[k];
+          if (Array.isArray(v) && v.length > 0) {
+            const first = v[0];
+            if (first && typeof first === 'object') {
+              videos = v;
+              break;
+            }
+          }
+        }
+      }
+      if (!videos || !Array.isArray(videos)) return null;
+      const validVideos = videos.filter((v) => v && typeof v === 'object');
+      if (validVideos.length === 0) return null;
+      return { ...(typeof obj === 'object' && !Array.isArray(obj) ? obj : {}), videos: validVideos };
     } catch {
       return null;
     }
@@ -245,11 +269,14 @@ export default function Chat({ user, onLogout }) {
 
   const handleDrop = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOver(false);
     const files = [...e.dataTransfer.files];
 
     const csvFiles = files.filter((f) => f.name.endsWith('.csv') || f.type === 'text/csv');
-    const jsonFiles = files.filter((f) => f.name.endsWith('.json') || f.type === 'application/json');
+    const jsonFiles = files.filter(
+      (f) => f.name.endsWith('.json') || f.type === 'application/json' || f.type?.includes('json')
+    );
     const imageFiles = files.filter((f) => f.type.startsWith('image/'));
 
     if (csvFiles.length > 0) {
@@ -264,6 +291,7 @@ export default function Chat({ user, onLogout }) {
         setSessionCsvRows(rows);
         setCsvDataSummary(computeDatasetSummary(rows, headers));
         setSessionSlimCsv(buildSlimCsv(rows, headers));
+        setFileLoadError('');
       }
     }
 
@@ -274,6 +302,27 @@ export default function Chat({ user, onLogout }) {
       if (parsed) {
         setJsonContext({ name: file.name, videoCount: parsed.videos?.length || 0 });
         setSessionJsonData(parsed);
+        setFileLoadError('');
+      } else {
+        setFileLoadError('JSON must contain an array of video objects (e.g. videos, items, or root array)');
+      }
+    }
+    if (jsonFiles.length === 0 && files.length > 0) {
+      const file = files[0];
+      if (file.size < 5_000_000) {
+        try {
+          const text = await fileToText(file);
+          const parsed = handleJsonParse(text);
+          if (parsed) {
+            setJsonContext({ name: file.name, videoCount: parsed.videos?.length || 0 });
+            setSessionJsonData(parsed);
+            setFileLoadError('');
+          } else {
+            setFileLoadError('JSON must contain an array of video objects');
+          }
+        } catch (err) {
+          setFileLoadError(err.message || 'Failed to read file');
+        }
       }
     }
 
@@ -294,7 +343,9 @@ export default function Chat({ user, onLogout }) {
     e.target.value = '';
 
     const csvFiles = files.filter((f) => f.name.endsWith('.csv') || f.type === 'text/csv');
-    const jsonFiles = files.filter((f) => f.name.endsWith('.json') || f.type === 'application/json');
+    const jsonFiles = files.filter(
+      (f) => f.name.endsWith('.json') || f.type === 'application/json' || f.type?.includes('json')
+    );
     const imageFiles = files.filter((f) => f.type.startsWith('image/'));
 
     if (csvFiles.length > 0) {
@@ -311,11 +362,35 @@ export default function Chat({ user, onLogout }) {
       }
     }
     if (jsonFiles.length > 0) {
-      const text = await fileToText(jsonFiles[0]);
-      const parsed = handleJsonParse(text);
-      if (parsed) {
-        setJsonContext({ name: jsonFiles[0].name, videoCount: parsed.videos?.length || 0 });
-        setSessionJsonData(parsed);
+      const file = jsonFiles[0];
+      try {
+        const text = await fileToText(file);
+        const parsed = handleJsonParse(text);
+        if (parsed) {
+          setJsonContext({ name: file.name, videoCount: parsed.videos?.length || 0 });
+          setSessionJsonData(parsed);
+          setFileLoadError('');
+        } else {
+          setFileLoadError('JSON must contain an array of video objects (videos, items, or root array)');
+        }
+      } catch (err) {
+        setFileLoadError(err.message || 'Failed to read file');
+      }
+    }
+    if (jsonFiles.length === 0 && csvFiles.length === 0 && imageFiles.length === 0 && files.length > 0) {
+      const file = files[0];
+      if (file.size < 10_000_000) {
+        try {
+          const text = await fileToText(file);
+          const parsed = handleJsonParse(text);
+          if (parsed) {
+            setJsonContext({ name: file.name, videoCount: parsed.videos?.length || 0 });
+            setSessionJsonData(parsed);
+            setFileLoadError('');
+          } else {
+            setFileLoadError('JSON must contain an array of video objects');
+          }
+        } catch (_) {}
       }
     }
     if (imageFiles.length > 0) {
@@ -381,7 +456,7 @@ export default function Chat({ user, onLogout }) {
     const capturedCsv = csvContext;
     const capturedJson = jsonContext;
     const needsBase64 = !!capturedCsv && wantPythonOnly;
-    const useTools = (!!sessionCsvRows || !!sessionJsonData) && !wantPythonOnly && !wantCode;
+    const useTools = !wantPythonOnly && !wantCode;
     const useCodeExecution = wantPythonOnly || wantCode;
 
     // ── Build prompt ─────────────────────────────────────────────────────────
@@ -634,17 +709,20 @@ ${sessionSummary}${slimCsvBlock}
 
       {/* ── Main chat area ───────────────────────── */}
       <div className="chat-main">
-        <>
+        <div
+          className={`chat-main-dropzone${dragOver ? ' drag-over' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+          onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+          }}
+          onDrop={handleDrop}
+        >
         <header className="chat-header">
           <h2 className="chat-header-title">{activeSession?.title ?? 'New Chat'}</h2>
         </header>
 
-        <div
-          className={`chat-messages${dragOver ? ' drag-over' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-        >
+        <div className="chat-messages">
           {messages.map((m) => (
             <div key={m.id} className={`chat-msg ${m.role}`}>
               <div className="chat-msg-meta">
@@ -780,12 +858,18 @@ ${sessionSummary}${slimCsvBlock}
         {/* ── Input area ── */}
         <div className="chat-input-area">
           {/* JSON chip */}
+          {fileLoadError && (
+            <div className="file-load-error">
+              {fileLoadError}
+              <button type="button" onClick={() => setFileLoadError('')} aria-label="Dismiss">×</button>
+            </div>
+          )}
           {jsonContext && (
             <div className="json-chip">
               <span className="json-chip-icon">📋</span>
               <span className="json-chip-name">{jsonContext.name}</span>
               <span className="json-chip-meta">{jsonContext.videoCount || 0} videos</span>
-              <button className="json-chip-remove" onClick={() => { setJsonContext(null); setSessionJsonData(null); }} aria-label="Remove JSON">×</button>
+              <button className="json-chip-remove" onClick={() => { setJsonContext(null); setSessionJsonData(null); setFileLoadError(''); }} aria-label="Remove JSON">×</button>
             </div>
           )}
           {/* CSV chip */}
@@ -816,7 +900,7 @@ ${sessionSummary}${slimCsvBlock}
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,.csv,text/csv,.json,application/json"
+            accept="image/*,.csv,text/csv,.json,application/json,*/*"
             multiple
             style={{ display: 'none' }}
             onChange={handleFileSelect}
@@ -856,7 +940,7 @@ ${sessionSummary}${slimCsvBlock}
             )}
           </div>
         </div>
-        </>
+        </div>
       </div>
     </div>
   );
