@@ -3,7 +3,8 @@ import { CSV_TOOL_DECLARATIONS } from './csvTools';
 
 const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY || '');
 
-const MODEL = 'gemini-2.0-flash';
+// Options: 'gemini-2.5-flash' (stable, good value) | 'gemini-2.5-flash-lite' (faster, cheaper) | 'gemini-2.5-pro' (most capable)
+const MODEL = 'gemini-2.5-flash';
 
 const SEARCH_TOOL = { googleSearch: {} };
 const CODE_EXEC_TOOL = { codeExecution: {} };

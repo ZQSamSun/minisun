@@ -58,10 +58,9 @@ export default function Auth({ onLogin }) {
           {mode === 'create' && (
             <input
               type="email"
-              placeholder="Email"
+              placeholder="Email (optional)"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
               autoComplete="email"
             />
           )}
