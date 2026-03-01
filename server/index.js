@@ -270,7 +270,7 @@ app.post('/api/chat/tools', async (req, res) => {
     }
 
     if (Array.isArray(csvRows) && csvRows.length > 0) {
-      const result = await chatWithCsvTools(history || [], message, csvHeaders || [], csvRows, user || null);
+      const result = await chatWithCsvTools(history || [], message, csvHeaders || [], csvRows, user || null, imageParts || []);
       return res.json(result);
     }
 

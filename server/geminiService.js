@@ -114,11 +114,13 @@ async function* streamChat(history, newMessage, imageParts = [], useCodeExecutio
   if (grounding) yield { type: 'grounding', data: grounding };
 }
 
-async function chatWithCsvTools(history, newMessage, csvHeaders, csvRows, userContext = null) {
+async function chatWithCsvTools(history, newMessage, csvHeaders, csvRows, userContext = null, imageParts = []) {
   const systemInstruction = loadSystemPrompt(userContext);
+  // generateImage is a standard tool — always included (no JSON required)
+  const csvAndImageTools = [...CSV_TOOL_DECLARATIONS, ...IMAGE_TOOL_DECLARATIONS];
   const model = genAI.getGenerativeModel({
     model: MODEL,
-    tools: [{ functionDeclarations: CSV_TOOL_DECLARATIONS }],
+    tools: [{ functionDeclarations: csvAndImageTools }],
   });
 
   const trimmed = history.length > MAX_HISTORY_MESSAGES ? history.slice(-MAX_HISTORY_MESSAGES) : history;
@@ -143,12 +145,18 @@ async function chatWithCsvTools(history, newMessage, csvHeaders, csvRows, userCo
   const msgWithContext =
     csvHeaders?.length ? `[CSV columns: ${csvHeaders.join(', ')}]\n\n${newMessage}` : newMessage;
 
-  let response = (await chat.sendMessage(msgWithContext)).response;
+  const firstMessageParts = [{ text: msgWithContext }];
+  for (const img of imageParts || []) {
+    firstMessageParts.push({
+      inlineData: { mimeType: img.mimeType || 'image/png', data: img.data },
+    });
+  }
+
+  let response = (await chat.sendMessage(firstMessageParts)).response;
 
   const charts = [];
   const toolCalls = [];
-
-  const executeFn = (toolName, args) => executeTool(toolName, args, csvRows);
+  const jsonChannelData = { videos: [] };
 
   for (let round = 0; round < 5; round++) {
     const parts = response.candidates?.[0]?.content?.parts || [];
@@ -156,8 +164,11 @@ async function chatWithCsvTools(history, newMessage, csvHeaders, csvRows, userCo
     if (!funcCall) break;
 
     const { name, args } = funcCall.functionCall;
-    const toolResult = executeFn(name, args);
-    toolCalls.push({ name, args, result: toolResult });
+    const toolResult =
+      name === 'generateImage'
+        ? await executeJsonTool(name, args || {}, jsonChannelData, imageParts)
+        : executeTool(name, args, csvRows);
+    toolCalls.push({ name, args: args || {}, result: toolResult });
     if (toolResult?._chartType) charts.push(toolResult);
 
     const compactResult = compactToolResultForModel(toolResult);

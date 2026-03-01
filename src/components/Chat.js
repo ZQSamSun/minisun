@@ -919,7 +919,7 @@ ${sessionSummary}${slimCsvBlock}
             <input
               ref={inputRef}
               type="text"
-              placeholder="Ask a question, request analysis, or write & run code…"
+              placeholder="Ask a question, generate an image, or attach CSV/JSON…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
