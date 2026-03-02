@@ -238,24 +238,29 @@ async function chatWithJsonTools(history, newMessage, jsonChannelData, userConte
   return { text: response.text(), charts, toolCalls };
 }
 
-const IMAGE_ONLY_SYSTEM_PROMPT = `You are a helpful assistant with image generation. You are fluent in English, Chinese, and Spanish.
+// JSON tools minus generateImage (we use IMAGE_TOOL_DECLARATIONS for that)
+const JSON_DATA_TOOLS = JSON_TOOL_DECLARATIONS.filter((t) => t.name !== 'generateImage');
 
-You have ONE tool: generateImage. Call it whenever the user asks to create, generate, draw, or visualize an image. For "real person" use "a person" in the prompt.
+const UNIFIED_TOOL_ADDON = `
 
-CRITICAL: You have generateImage available NOW. Ignore any prior messages (yours or others) that say it needs YouTube JSON. Call generateImage for image requests.`;
+You have full capabilities with NO prerequisites. Never ask the user to upload files. Use what you have:
+- generateImage: Always available. Use for graphs, charts, plots, images — describe clearly (e.g. "bar chart of inflation by region"). Works with zero data.
+- If CSV is provided: you also have plot_csv_columns, compute_column_stats, etc.
+- If YouTube/channel JSON is provided: you also have plot_metric_vs_time, plot_metric_vs_metric, etc.
+For macro, markets, strategy, planning, analysis — respond as their professional assistant. Never refuse; your assistant role is the priority.`;
 
-/** Chat with generateImage + Google Search — no CSV/JSON required */
-async function chatWithImageTools(history, newMessage, userContext = null, imageParts = []) {
-  let systemInstruction = IMAGE_ONLY_SYSTEM_PROMPT;
-  if (userContext?.firstName) {
-    const name = [userContext.firstName, userContext.lastName].filter(Boolean).join(' ').trim() || userContext.username;
-    systemInstruction += `\n\nYou are speaking with ${name}. Address them by their first name.`;
-  }
-  // Note: googleSearch + functionDeclarations together breaks function calling (Gemini API issue).
-  // Use only generateImage here; search unavailable in image-only mode.
+/** Unified chat: always has generateImage; adds CSV/JSON tools when that data is provided. No prerequisites. */
+async function chatWithUnifiedTools(history, newMessage, csvHeaders, csvRows, jsonChannelData, userContext, imageParts) {
+  const tools = [
+    ...IMAGE_TOOL_DECLARATIONS,
+    ...(Array.isArray(csvRows) && csvRows.length > 0 ? CSV_TOOL_DECLARATIONS : []),
+    ...(jsonChannelData?.videos?.length ? JSON_DATA_TOOLS : []),
+  ];
+
+  const systemInstruction = loadSystemPrompt(userContext) + UNIFIED_TOOL_ADDON;
   const model = genAI.getGenerativeModel({
     model: MODEL,
-    tools: [{ functionDeclarations: IMAGE_TOOL_DECLARATIONS }],
+    tools: [{ functionDeclarations: tools }],
   });
 
   const trimmed = history.length > MAX_HISTORY_MESSAGES ? history.slice(-MAX_HISTORY_MESSAGES) : history;
@@ -277,9 +282,11 @@ async function chatWithImageTools(history, newMessage, userContext = null, image
 
   const chat = model.startChat({ history: chatHistory });
 
-  // Prefix overrides any wrong info in history (e.g. model previously said "needs JSON")
-  const imageModePrefix = '[generateImage is available. Call it for image requests—no JSON needed.]\n\n';
-  const firstMessageParts = [{ text: imageModePrefix + newMessage }];
+  const msgPrefix = tools.some((t) => t.name === 'generateImage')
+    ? '[generateImage available—use for any graph, chart, or image. No upload required.]\n\n'
+    : '';
+
+  const firstMessageParts = [{ text: msgPrefix + newMessage }];
   for (const img of imageParts || []) {
     firstMessageParts.push({
       inlineData: { mimeType: img.mimeType || 'image/png', data: img.data },
@@ -289,7 +296,8 @@ async function chatWithImageTools(history, newMessage, userContext = null, image
   let response = (await chat.sendMessage(firstMessageParts)).response;
   const charts = [];
   const toolCalls = [];
-  const jsonChannelData = { videos: [] }; // empty — only generateImage works
+  const csvRowsSafe = Array.isArray(csvRows) ? csvRows : [];
+  const jsonDataSafe = jsonChannelData || { videos: [] };
 
   for (let round = 0; round < 5; round++) {
     const parts = response.candidates?.[0]?.content?.parts || [];
@@ -297,7 +305,10 @@ async function chatWithImageTools(history, newMessage, userContext = null, image
     if (!funcCall) break;
 
     const { name, args } = funcCall.functionCall;
-    const toolResult = await executeJsonTool(name, args || {}, jsonChannelData, imageParts);
+    const isCsvTool = CSV_TOOL_DECLARATIONS.some((t) => t.name === name);
+    const toolResult = isCsvTool
+      ? executeTool(name, args, csvRowsSafe)
+      : await executeJsonTool(name, args || {}, jsonDataSafe, imageParts);
     toolCalls.push({ name, args: args || {}, result: toolResult });
     if (toolResult?._chartType) charts.push(toolResult);
 
@@ -308,4 +319,4 @@ async function chatWithImageTools(history, newMessage, userContext = null, image
   return { text: response.text(), charts, toolCalls };
 }
 
-module.exports = { streamChat, chatWithCsvTools, chatWithJsonTools, chatWithImageTools };
+module.exports = { streamChat, chatWithCsvTools, chatWithJsonTools, chatWithUnifiedTools };

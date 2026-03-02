@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { streamChat, chatWithTools, CODE_KEYWORDS } from '../services/chatApi';
+import { streamChat, chatWithTools } from '../services/chatApi';
+import { detectIntent } from '../services/routing';
 import { parseCsvToRows, computeDatasetSummary, enrichWithEngagement, buildSlimCsv } from '../services/csvTools';
 import {
   getSessions,
@@ -450,14 +451,37 @@ export default function Chat({ user, onLogout }) {
       setSessions((prev) => [{ id, agent: 'assistant', title, createdAt: new Date().toISOString(), messageCount: 0 }, ...prev]);
     }
 
+    const { forcePython, forceJs, allowFallback, cleanedText } = detectIntent(text);
+    const hasData = !!(sessionCsvRows?.length || sessionJsonData?.videos?.length || csvContext || jsonContext);
+
     const PYTHON_ONLY_KEYWORDS = /\b(regression|scatter|histogram|seaborn|matplotlib|numpy|time.?series|heatmap|box.?plot|violin|distribut|linear.?model|logistic|forecast|trend.?line)\b/i;
-    const wantPythonOnly = PYTHON_ONLY_KEYWORDS.test(text);
-    const wantCode = CODE_KEYWORDS.test(text) && !sessionCsvRows && !sessionJsonData;
+    const wantPythonAuto = PYTHON_ONLY_KEYWORDS.test(cleanedText) && hasData;
+
     const capturedCsv = csvContext;
     const capturedJson = jsonContext;
-    const needsBase64 = !!capturedCsv && wantPythonOnly;
-    const useTools = !wantPythonOnly && !wantCode;
-    const useCodeExecution = wantPythonOnly || wantCode;
+
+    let useTools;
+    let useCodeExecution;
+    if (forceJs) {
+      useTools = true;
+      useCodeExecution = false;
+    } else if (forcePython) {
+      if (hasData) {
+        useTools = false;
+        useCodeExecution = true;
+      } else if (allowFallback) {
+        useTools = true;
+        useCodeExecution = false;
+      } else {
+        useTools = true;
+        useCodeExecution = false;
+      }
+    } else {
+      useTools = !wantPythonAuto;
+      useCodeExecution = wantPythonAuto;
+    }
+
+    const needsBase64 = !!capturedCsv && (useCodeExecution || (forcePython && hasData));
 
     // ── Build prompt ─────────────────────────────────────────────────────────
     // sessionSummary: auto-computed column stats, included with every message
@@ -500,10 +524,18 @@ ${sessionSummary}${slimCsvBlock}
       ? `[CSV columns: ${sessionCsvHeaders?.join(', ')}]\n\n${sessionSummary}\n\n---\n\n`
       : '';
 
-    const fullPrefix = jsonPrefix + csvPrefix;
+    const wantsChart = /\b(chart|graph|plot|visuali[sz]e)\b/i.test(cleanedText);
+    const hasCsv = capturedCsv || sessionCsvRows?.length;
+    const hasJson = capturedJson || sessionJsonData?.videos?.length;
+    const chartHint = wantsChart && (hasCsv
+      ? '[User wants a chart. Call plot_csv_columns with xColumn and yColumn from the CSV.]\n\n'
+      : hasJson
+        ? '[User wants a chart. Call plot_metric_vs_time or plot_metric_vs_metric with fields from the channel data.]\n\n'
+        : '');
+    const fullPrefix = jsonPrefix + csvPrefix + chartHint;
 
-    const userContent = text || (images.length ? '(Image)' : jsonContext ? '(JSON attached)' : csvContext ? '(CSV attached)' : '');
-    const promptForGemini = fullPrefix + (text || (images.length ? 'What do you see in this image?' : jsonContext ? 'Please analyze this YouTube channel JSON data.' : 'Please analyze this CSV data.'));
+    const userContent = cleanedText || (images.length ? '(Image)' : jsonContext ? '(JSON attached)' : csvContext ? '(CSV attached)' : '');
+    const promptForGemini = fullPrefix + (cleanedText || (images.length ? 'What do you see in this image?' : jsonContext ? 'Please analyze this YouTube channel JSON data.' : csvContext ? 'Please analyze this CSV data.' : ''));
 
     const userMsg = {
       id: `u-${Date.now()}`,
@@ -560,6 +592,9 @@ ${sessionSummary}${slimCsvBlock}
             jsonChannelData: capturedJsonData || sessionJsonData,
             user,
             imageParts: imageParts,
+            forcePython,
+            forceJs,
+            allowFallback,
           }
         );
         fullContent = answer;
@@ -919,7 +954,7 @@ ${sessionSummary}${slimCsvBlock}
             <input
               ref={inputRef}
               type="text"
-              placeholder="Ask a question, generate an image, or attach CSV/JSON…"
+              placeholder="Ask a question, attach CSV/JSON… Use /python or /js to force mode"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}

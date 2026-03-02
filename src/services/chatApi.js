@@ -60,7 +60,11 @@ export const streamChat = async function* (history, newMessage, imageParts = [],
   }
 };
 
-export const chatWithTools = async (history, newMessage, { csvHeaders, csvRows, jsonChannelData, user, imageParts } = {}) => {
+export const chatWithTools = async (
+  history,
+  newMessage,
+  { csvHeaders, csvRows, jsonChannelData, user, imageParts, forcePython, forceJs, allowFallback } = {}
+) => {
   const res = await fetch(`${API}/api/chat/tools`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -72,6 +76,9 @@ export const chatWithTools = async (history, newMessage, { csvHeaders, csvRows, 
       jsonChannelData: jsonChannelData || null,
       user: user || null,
       imageParts: imageParts || [],
+      forcePython: !!forcePython,
+      forceJs: !!forceJs,
+      allowFallback: !!allowFallback,
     }),
   });
 

@@ -236,7 +236,7 @@ app.post('/api/youtube/channel', async (req, res) => {
 
 // ── Chat (Gemini proxy — API key stays on server) ─────────────────────────────
 
-const { streamChat, chatWithCsvTools, chatWithJsonTools, chatWithImageTools } = require('./geminiService');
+const { streamChat, chatWithUnifiedTools } = require('./geminiService');
 
 app.post('/api/chat/stream', async (req, res) => {
   try {
@@ -259,23 +259,57 @@ app.post('/api/chat/stream', async (req, res) => {
   }
 });
 
+// Typed routing errors — deterministic handling when chosen route can't run
+const ROUTING_ERRORS = {
+  PYTHON_PREREQ_MISSING: 'PYTHON_PREREQ_MISSING',
+  NO_DATA_ATTACHED: 'NO_DATA_ATTACHED',
+  UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',
+};
+
+const ROUTING_MESSAGES = {
+  NO_DATA_ATTACHED: `I can run this in Python, but I need CSV or JSON data attached. Upload your file and I'll execute the code.
+
+If you'd like, I can generate a chart with the JS tools instead (type "just do whatever you can" to allow fallback).`,
+};
+
 app.post('/api/chat/tools', async (req, res) => {
   try {
-    const { history, message, csvHeaders, csvRows, jsonChannelData, user, imageParts } = req.body;
+    const {
+      history,
+      message,
+      csvHeaders,
+      csvRows,
+      jsonChannelData,
+      user,
+      imageParts,
+      forcePython,
+      forceJs,
+      allowFallback,
+    } = req.body;
     if (typeof message !== 'string') return res.status(400).json({ error: 'message required' });
 
-    if (jsonChannelData?.videos?.length) {
-      const result = await chatWithJsonTools(history || [], message, jsonChannelData, user || null, imageParts || []);
-      return res.json(result);
+    const hasData = (Array.isArray(csvRows) && csvRows.length > 0) || (jsonChannelData?.videos?.length > 0);
+
+    // Routing: force_python + no data + no fallback → typed error (Option 1: ask for missing)
+    if (forcePython && !hasData && !allowFallback) {
+      return res.json({
+        text: ROUTING_MESSAGES.NO_DATA_ATTACHED,
+        charts: [],
+        toolCalls: [],
+        _routingError: ROUTING_ERRORS.PYTHON_PREREQ_MISSING,
+        _routingCode: ROUTING_ERRORS.NO_DATA_ATTACHED,
+      });
     }
 
-    if (Array.isArray(csvRows) && csvRows.length > 0) {
-      const result = await chatWithCsvTools(history || [], message, csvHeaders || [], csvRows, user || null, imageParts || []);
-      return res.json(result);
-    }
-
-    // No JSON/CSV — use image + search tools (generateImage works without YouTube data)
-    const result = await chatWithImageTools(history || [], message, user || null, imageParts || []);
+    const result = await chatWithUnifiedTools(
+      history || [],
+      message,
+      csvHeaders || [],
+      csvRows || [],
+      jsonChannelData || null,
+      user || null,
+      imageParts || []
+    );
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
