@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { streamChat, chatWithTools } from '../services/chatApi';
-import { detectIntent } from '../services/routing';
+import { detectIntent, NEEDS_SEARCH } from '../services/routing';
 import { parseCsvToRows, computeDatasetSummary, enrichWithEngagement, buildSlimCsv } from '../services/csvTools';
 import {
   getSessions,
@@ -460,6 +460,7 @@ export default function Chat({ user, onLogout }) {
     const capturedCsv = csvContext;
     const capturedJson = jsonContext;
 
+    const needsSearch = NEEDS_SEARCH.test(cleanedText);
     let useTools;
     let useCodeExecution;
     if (forceJs) {
@@ -476,6 +477,9 @@ export default function Chat({ user, onLogout }) {
         useTools = true;
         useCodeExecution = false;
       }
+    } else if (needsSearch) {
+      useTools = false;
+      useCodeExecution = false;
     } else {
       useTools = !wantPythonAuto;
       useCodeExecution = wantPythonAuto;
@@ -614,7 +618,9 @@ ${sessionSummary}${slimCsvBlock}
         );
       } else {
         // ── Streaming path: code execution or search ─────────────────────────
-        for await (const chunk of streamChat(history, promptForGemini, imageParts, useCodeExecution, {
+        const searchHint = needsSearch ? '[Use Google Search to look up current information. The user wants real-time data—do not refuse.]\n\n' : '';
+        const streamPrompt = searchHint + promptForGemini;
+        for await (const chunk of streamChat(history, streamPrompt, imageParts, useCodeExecution, {
           signal: abortControllerRef.current.signal,
           user,
         })) {

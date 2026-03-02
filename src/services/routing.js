@@ -13,6 +13,9 @@ const FORCE_JS = /\b(use\s+js|use\s+javascript|javascript\s+path)\b/i;
 /** Fallback: "just do whatever you can" when Python can't run */
 const ALLOW_FALLBACK = /\b(just\s+do\s+whatever\s+you\s+can|whatever\s+works|fallback|use\s+js\s+instead)\b/i;
 
+/** Needs Google Search — weather, real-time, current events, stocks. Route to stream path. */
+export const NEEDS_SEARCH = /\b(weather|天气|气温|temperature|real.?time|current|today'?s?|latest|stock\s+price|股价|汇率|exchange\s+rate|news|新闻|热搜|trending|几度|多少度|how'?s?\s+the\s+weather|what'?s?\s+the\s+weather)\b/i;
+
 /** Remove mode commands from message for Gemini (strip leading /python, /js, etc.) */
 function stripModeCommands(text) {
   if (!text || typeof text !== 'string') return text;

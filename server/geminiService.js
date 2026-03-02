@@ -45,8 +45,11 @@ function loadSystemPrompt(userContext = null) {
   return base;
 }
 
+const SEARCH_MODE_INSTRUCTION = `\n\nYou have Google Search enabled. When the user asks for weather, current events, stock prices, or any real-time/live information, you MUST use it. Do NOT refuse or say you cannot provide real-time data. Look up the answer using search and respond with the results.`;
+
 async function* streamChat(history, newMessage, imageParts = [], useCodeExecution = false, userContext = null) {
-  const systemInstruction = loadSystemPrompt(userContext);
+  let systemInstruction = loadSystemPrompt(userContext);
+  if (!useCodeExecution) systemInstruction += SEARCH_MODE_INSTRUCTION;
   const tools = useCodeExecution ? [CODE_EXEC_TOOL] : [SEARCH_TOOL];
   const model = genAI.getGenerativeModel({ model: MODEL, tools });
 
