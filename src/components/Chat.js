@@ -132,6 +132,7 @@ export default function Chat({ user, onLogout }) {
   const [dragOver, setDragOver] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [fileLoadError, setFileLoadError] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -181,6 +182,7 @@ export default function Chat({ user, onLogout }) {
   // ── Session management ──────────────────────────────────────────────────────
 
   const handleNewChat = () => {
+    setSidebarOpen(false);
     setActiveSessionId('new');
     setMessages([]);
     setInput('');
@@ -195,6 +197,7 @@ export default function Chat({ user, onLogout }) {
 
   const handleSelectSession = (sessionId) => {
     if (sessionId === activeSessionId) return;
+    setSidebarOpen(false);
     setActiveSessionId(sessionId);
     setInput('');
     setImages([]);
@@ -697,10 +700,14 @@ ${sessionSummary}${slimCsvBlock}
 
   return (
     <div className="chat-layout">
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden="true" />}
       {/* ── Sidebar ──────────────────────────────── */}
-      <aside className="chat-sidebar">
+      <aside className={`chat-sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-top">
-          <h1 className="sidebar-title">Chat</h1>
+          <div className="sidebar-top-row">
+            <h1 className="sidebar-title">Chat</h1>
+            <button type="button" className="sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu">×</button>
+          </div>
           <button className="new-chat-btn" onClick={handleNewChat}>
             + New Chat
           </button>
@@ -760,6 +767,14 @@ ${sessionSummary}${slimCsvBlock}
           onDrop={handleDrop}
         >
         <header className="chat-header">
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
           <h2 className="chat-header-title">{activeSession?.title ?? 'New Chat'}</h2>
         </header>
 

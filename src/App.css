@@ -10,6 +10,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* mobile: excludes address bar */
+  min-height: 100vh;
   background: #0f0f23;
 }
 
