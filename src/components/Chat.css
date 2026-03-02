@@ -1160,10 +1160,9 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* ── Mobile responsive: sidebar overlay, full-width chat ───────────────────── */
+/* ── Sidebar overlay (all screen sizes) ──────────────────────────────────── */
 
 .sidebar-backdrop {
-  display: none;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
@@ -1171,7 +1170,6 @@
 }
 
 .sidebar-toggle {
-  display: none;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.9);
@@ -1201,7 +1199,6 @@
 }
 
 .sidebar-close {
-  display: none;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.8);
@@ -1216,46 +1213,30 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.chat-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  max-width: 85vw;
+  z-index: 50;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  box-shadow: none;
+}
+
+.chat-sidebar.sidebar-open {
+  transform: translateX(0);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.chat-main {
+  min-width: 0;
+  width: 100%;
+}
+
 @media (max-width: 768px) {
-  .sidebar-backdrop {
-    display: block;
-  }
-
-  .sidebar-toggle {
-    display: block;
-  }
-
-  .sidebar-close {
-    display: block;
-  }
-
-  .sidebar-top .sidebar-title {
-    margin-bottom: 0;
-  }
-
-  .chat-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 280px;
-    max-width: 85vw;
-    z-index: 50;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    box-shadow: none;
-  }
-
-  .chat-sidebar.sidebar-open {
-    transform: translateX(0);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
-  }
-
-  .chat-main {
-    min-width: 0;
-    width: 100%;
-  }
-
   .chat-msg {
     max-width: 90%;
   }
